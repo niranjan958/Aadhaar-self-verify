@@ -5,9 +5,17 @@ from flask import Flask, request, jsonify
 from PIL import Image
 from io import BytesIO
 
-# ── Use relative path — stays in app folder after deploy ──
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-pytesseract.pytesseract.tesseract_cmd = os.path.join(BASE_DIR, 'tesseract', 'tesseract')
+
+# Try extracted binary first, then AppImage
+extracted = os.path.join(BASE_DIR, 'tesseract', 'tesseract_bin')
+appimage  = os.path.join(BASE_DIR, 'tesseract', 'tesseract')
+
+if os.path.exists(extracted):
+    pytesseract.pytesseract.tesseract_cmd = extracted
+else:
+    pytesseract.pytesseract.tesseract_cmd = appimage
+
 os.environ['TESSDATA_PREFIX'] = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
 
 app = Flask(__name__)
@@ -55,7 +63,14 @@ def is_match(entered, numbers_found, clean_ocr):
 
 @app.route('/', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "service": "Aadhaar OCR — Tesseract"})
+    tess_path = pytesseract.pytesseract.tesseract_cmd
+    tess_exists = os.path.exists(tess_path)
+    return jsonify({
+        "status":      "ok",
+        "service":     "Aadhaar OCR — Tesseract",
+        "tess_path":   tess_path,
+        "tess_exists": tess_exists
+    })
 
 
 @app.route('/verify', methods=['POST'])
