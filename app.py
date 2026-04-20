@@ -29,30 +29,25 @@ def extract_aadhaar_numbers(text):
 
 
 def preprocess_image(image):
-    # ── Step 1: Convert to grayscale — fewer pixels to process
+    # Grayscale — fewer pixels
     image = image.convert('L')
-
-    # ── Step 2: Resize to max 800px width — faster OCR
-    if image.width > 800:
-        ratio = 800 / image.width
-        image = image.resize((800, int(image.height * ratio)), Image.LANCZOS)
-
-    # ── Step 3: Increase contrast — better digit detection
-    enhancer = ImageEnhance.Contrast(image)
-    image    = enhancer.enhance(2.0)
-
-    # ── Step 4: Sharpen — cleaner edges on digits
+    # Resize to max 600px — faster OCR
+    if image.width > 600:
+        ratio = 600 / image.width
+        image = image.resize((600, int(image.height * ratio)), Image.LANCZOS)
+    # Boost contrast
+    image = ImageEnhance.Contrast(image).enhance(2.0)
+    # Sharpen
     image = image.filter(ImageFilter.SHARPEN)
-
     return image
 
 
 def run_ocr(image):
     image = preprocess_image(image)
-    # digits only mode — much faster than full OCR
     text  = pytesseract.image_to_string(
         image,
-        config='--oem 1 --psm 6 -c tessedit_char_whitelist=0123456789'
+        config='--oem 1 --psm 6 -c tessedit_char_whitelist=0123456789',
+        timeout=60
     )
     return text
 
@@ -72,10 +67,10 @@ def health():
             [TESS_BIN, '--version'],
             capture_output=True, text=True, timeout=10
         )
-        tess_ok = result.returncode == 0
+        tess_ok      = result.returncode == 0
         tess_version = (result.stdout + result.stderr).strip()
     except Exception as e:
-        tess_ok = False
+        tess_ok      = False
         tess_version = str(e)
 
     return jsonify({
@@ -119,7 +114,7 @@ def verify():
         if file_bytes[:4] == b'%PDF':
             try:
                 from pdf2image import convert_from_bytes
-                pages = convert_from_bytes(file_bytes, dpi=150)
+                pages = convert_from_bytes(file_bytes, dpi=100)
                 for page in pages:
                     full_text += run_ocr(page) + " "
             except Exception as e:
