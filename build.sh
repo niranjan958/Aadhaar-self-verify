@@ -5,21 +5,18 @@ echo "=== Installing Python dependencies ==="
 pip install -r requirements.txt
 
 echo "=== Downloading Tesseract binary ==="
-mkdir -p /opt/tesseract/tessdata
+mkdir -p /tmp/tesseract/tessdata
 
-# Download pre-built Tesseract 5 binary for Linux x64
-wget -q "https://github.com/itinerantfoodie/tesseract-static/releases/download/v5.3.0/tesseract" \
-     -O /opt/tesseract/tesseract || \
 wget -q "https://github.com/nicowillis/tesseract-linux-binary/releases/download/v5.0.0/tesseract" \
-     -O /opt/tesseract/tesseract
+     -O /tmp/tesseract/tesseract
 
-chmod +x /opt/tesseract/tesseract
+chmod +x /tmp/tesseract/tesseract
 
 echo "=== Downloading English language data ==="
 wget -q "https://github.com/tesseract-ocr/tessdata/raw/main/eng.traineddata" \
-     -O /opt/tesseract/tessdata/eng.traineddata
+     -O /tmp/tesseract/tessdata/eng.traineddata
 
-echo "=== Verifying Tesseract ==="
-/opt/tesseract/tesseract --version && echo "Tesseract OK" || echo "Tesseract binary check failed — will fallback"
+echo "=== Verifying ==="
+/tmp/tesseract/tesseract --version && echo "Tesseract OK"
 
 echo "=== Build complete ==="
