@@ -7,13 +7,13 @@ from PIL import Image
 from io import BytesIO
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-APPIMAGE = os.path.join(BASE_DIR, 'tesseract', 'tesseract')
-TESSDATA = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
 
-# ── Use AppImage directly with TESSDATA_PREFIX ────────
+# ── Use pre-extracted AppRun — fast, no extraction on each request
+TESS_BIN  = os.path.join(BASE_DIR, 'tesseract', 'squashfs-root', 'AppRun')
+TESSDATA  = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
+
 os.environ['TESSDATA_PREFIX'] = TESSDATA
-os.environ['APPIMAGE_EXTRACT_AND_RUN'] = '1'
-pytesseract.pytesseract.tesseract_cmd = APPIMAGE
+pytesseract.pytesseract.tesseract_cmd = TESS_BIN
 
 app = Flask(__name__)
 
@@ -60,25 +60,23 @@ def is_match(entered, numbers_found, clean_ocr):
 
 @app.route('/', methods=['GET'])
 def health():
-    # Test if tesseract actually runs
     try:
         result = subprocess.run(
-            [APPIMAGE, '--version'],
-            capture_output=True, text=True,
-            env={**os.environ, 'APPIMAGE_EXTRACT_AND_RUN': '1'},
-            timeout=10
+            [TESS_BIN, '--version'],
+            capture_output=True, text=True, timeout=10
         )
-        tess_version = result.stdout.strip() or result.stderr.strip()
+        tess_version = (result.stdout + result.stderr).strip()
         tess_ok = result.returncode == 0
     except Exception as e:
         tess_version = str(e)
         tess_ok = False
 
     return jsonify({
-        "status":      "ok",
-        "service":     "Aadhaar OCR — Tesseract",
-        "tess_ok":     tess_ok,
-        "tess_version": tess_version
+        "status":       "ok",
+        "service":      "Aadhaar OCR — Tesseract",
+        "tess_ok":      tess_ok,
+        "tess_version": tess_version,
+        "tess_path":    TESS_BIN
     })
 
 
