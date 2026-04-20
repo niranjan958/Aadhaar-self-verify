@@ -5,9 +5,10 @@ from flask import Flask, request, jsonify
 from PIL import Image
 from io import BytesIO
 
-# ── Point to downloaded Tesseract binary ──────────────
-pytesseract.pytesseract.tesseract_cmd = '/opt/tesseract/tesseract'
-os.environ['TESSDATA_PREFIX'] = '/opt/tesseract/tessdata'
+# ── Use relative path — stays in app folder after deploy ──
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+pytesseract.pytesseract.tesseract_cmd = os.path.join(BASE_DIR, 'tesseract', 'tesseract')
+os.environ['TESSDATA_PREFIX'] = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
 
 app = Flask(__name__)
 
@@ -37,8 +38,8 @@ def compress_image(image):
 
 
 def run_ocr(image):
-    image    = compress_image(image)
-    text     = pytesseract.image_to_string(image, config='--oem 3 --psm 6')
+    image = compress_image(image)
+    text  = pytesseract.image_to_string(image, config='--oem 3 --psm 6')
     if not text.strip():
         text = pytesseract.image_to_string(image, config='--oem 3 --psm 11')
     return text
@@ -60,10 +61,8 @@ def health():
 @app.route('/verify', methods=['POST'])
 def verify():
     try:
-        # aadhaar_number from URL query param
         aadhaar_number = request.args.get("aadhaar_number", "").replace(" ", "").replace("-", "")
 
-        # file from Deluge files: parameter — arrives as key 'content'
         uploaded_file = (
             request.files.get("content") or
             request.files.get("file") or
@@ -76,10 +75,10 @@ def verify():
                             "message": "aadhaar_number missing"}), 400
         if len(aadhaar_number) != 12 or not aadhaar_number.isdigit():
             return jsonify({"success": False, "match": False,
-                            "message": "Must be 12 digits. got=" + aadhaar_number}), 400
+                            "message": "Must be 12 digits"}), 400
         if not uploaded_file:
             return jsonify({"success": False, "match": False,
-                            "message": "file missing. keys=" + str(list(request.files.keys()))}), 400
+                            "message": "file missing"}), 400
 
         file_bytes = uploaded_file.read()
         if not file_bytes or len(file_bytes) < 100:
@@ -97,9 +96,9 @@ def verify():
                     full_text += run_ocr(page) + " "
             except Exception as e:
                 return jsonify({"success": False, "match": False,
-                                "message": "PDF processing failed: " + str(e)}), 500
+                                "message": "PDF failed: " + str(e)}), 500
 
-        # ── Image (JPG / PNG) ─────────────────────────────
+        # ── Image ─────────────────────────────────────────
         else:
             try:
                 image     = Image.open(BytesIO(file_bytes))
@@ -107,11 +106,11 @@ def verify():
                 full_text = run_ocr(image)
             except Exception as e:
                 return jsonify({"success": False, "match": False,
-                                "message": "Image processing failed: " + str(e)}), 500
+                                "message": "Image failed: " + str(e)}), 500
 
         if not full_text.strip():
             return jsonify({"success": False, "match": False,
-                            "message": "No text detected. Upload a clearer image."}), 200
+                            "message": "No text detected"}), 200
 
         numbers_found, clean_ocr = extract_aadhaar_numbers(full_text)
         match = is_match(aadhaar_number, numbers_found, clean_ocr)
