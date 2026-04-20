@@ -7,23 +7,18 @@ pip install -r requirements.txt
 echo "=== Downloading Tesseract AppImage ==="
 mkdir -p ./tesseract/tessdata
 
-# Download real working Tesseract AppImage
 wget -q "https://github.com/AlexanderP/tesseract-appimage/releases/download/v5.3.3/tesseract-5.3.3-x86_64.AppImage" \
-     -O ./tesseract/tesseract
+     -O ./tesseract/tesseract.AppImage
 
-chmod +x ./tesseract/tesseract
+chmod +x ./tesseract/tesseract.AppImage
 
-# Extract AppImage so it runs without FUSE (Render doesn't support FUSE)
+echo "=== Extracting AppImage (so it runs fast without FUSE) ==="
 cd ./tesseract
-./tesseract --appimage-extract > /dev/null 2>&1 || true
+APPIMAGE_EXTRACT_AND_RUN=1 ./tesseract.AppImage --appimage-extract
 cd ..
 
-# Use extracted binary if AppImage extraction worked
-if [ -f "./tesseract/squashfs-root/AppRun" ]; then
-  echo "Using extracted AppImage"
-  cp ./tesseract/squashfs-root/usr/bin/tesseract ./tesseract/tesseract_bin
-  cp -r ./tesseract/squashfs-root/usr/share/tessdata ./tesseract/tessdata_extracted || true
-fi
+echo "=== Verifying extracted binary ==="
+./tesseract/squashfs-root/AppRun --version && echo "Tesseract OK"
 
 echo "=== Downloading English language data ==="
 wget -q "https://github.com/tesseract-ocr/tessdata/raw/main/eng.traineddata" \
