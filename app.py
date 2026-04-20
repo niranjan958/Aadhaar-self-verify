@@ -3,14 +3,12 @@ import re
 import subprocess
 import pytesseract
 from flask import Flask, request, jsonify
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 from io import BytesIO
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# ── Use pre-extracted AppRun — fast, no extraction on each request
-TESS_BIN  = os.path.join(BASE_DIR, 'tesseract', 'squashfs-root', 'AppRun')
-TESSDATA  = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
+TESS_BIN = os.path.join(BASE_DIR, 'tesseract', 'squashfs-root', 'AppRun')
+TESSDATA = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
 
 os.environ['TESSDATA_PREFIX'] = TESSDATA
 pytesseract.pytesseract.tesseract_cmd = TESS_BIN
@@ -30,23 +28,32 @@ def extract_aadhaar_numbers(text):
     return found, clean
 
 
-def compress_image(image):
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
-    if image.width > 1200:
-        ratio = 1200 / image.width
-        image = image.resize((1200, int(image.height * ratio)), Image.LANCZOS)
-    if image.height > 1600:
-        ratio = 1600 / image.height
-        image = image.resize((int(image.width * ratio), 1600), Image.LANCZOS)
+def preprocess_image(image):
+    # ── Step 1: Convert to grayscale — fewer pixels to process
+    image = image.convert('L')
+
+    # ── Step 2: Resize to max 800px width — faster OCR
+    if image.width > 800:
+        ratio = 800 / image.width
+        image = image.resize((800, int(image.height * ratio)), Image.LANCZOS)
+
+    # ── Step 3: Increase contrast — better digit detection
+    enhancer = ImageEnhance.Contrast(image)
+    image    = enhancer.enhance(2.0)
+
+    # ── Step 4: Sharpen — cleaner edges on digits
+    image = image.filter(ImageFilter.SHARPEN)
+
     return image
 
 
 def run_ocr(image):
-    image = compress_image(image)
-    text  = pytesseract.image_to_string(image, config='--oem 3 --psm 6')
-    if not text.strip():
-        text = pytesseract.image_to_string(image, config='--oem 3 --psm 11')
+    image = preprocess_image(image)
+    # digits only mode — much faster than full OCR
+    text  = pytesseract.image_to_string(
+        image,
+        config='--oem 1 --psm 6 -c tessedit_char_whitelist=0123456789'
+    )
     return text
 
 
@@ -65,18 +72,17 @@ def health():
             [TESS_BIN, '--version'],
             capture_output=True, text=True, timeout=10
         )
-        tess_version = (result.stdout + result.stderr).strip()
         tess_ok = result.returncode == 0
+        tess_version = (result.stdout + result.stderr).strip()
     except Exception as e:
-        tess_version = str(e)
         tess_ok = False
+        tess_version = str(e)
 
     return jsonify({
         "status":       "ok",
         "service":      "Aadhaar OCR — Tesseract",
         "tess_ok":      tess_ok,
-        "tess_version": tess_version,
-        "tess_path":    TESS_BIN
+        "tess_version": tess_version
     })
 
 
@@ -113,7 +119,7 @@ def verify():
         if file_bytes[:4] == b'%PDF':
             try:
                 from pdf2image import convert_from_bytes
-                pages = convert_from_bytes(file_bytes, dpi=200)
+                pages = convert_from_bytes(file_bytes, dpi=150)
                 for page in pages:
                     full_text += run_ocr(page) + " "
             except Exception as e:
