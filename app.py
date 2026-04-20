@@ -1,22 +1,19 @@
 import os
 import re
+import subprocess
 import pytesseract
 from flask import Flask, request, jsonify
 from PIL import Image
 from io import BytesIO
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APPIMAGE = os.path.join(BASE_DIR, 'tesseract', 'tesseract')
+TESSDATA = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
 
-# Try extracted binary first, then AppImage
-extracted = os.path.join(BASE_DIR, 'tesseract', 'tesseract_bin')
-appimage  = os.path.join(BASE_DIR, 'tesseract', 'tesseract')
-
-if os.path.exists(extracted):
-    pytesseract.pytesseract.tesseract_cmd = extracted
-else:
-    pytesseract.pytesseract.tesseract_cmd = appimage
-
-os.environ['TESSDATA_PREFIX'] = os.path.join(BASE_DIR, 'tesseract', 'tessdata')
+# ── Use AppImage directly with TESSDATA_PREFIX ────────
+os.environ['TESSDATA_PREFIX'] = TESSDATA
+os.environ['APPIMAGE_EXTRACT_AND_RUN'] = '1'
+pytesseract.pytesseract.tesseract_cmd = APPIMAGE
 
 app = Flask(__name__)
 
@@ -63,13 +60,25 @@ def is_match(entered, numbers_found, clean_ocr):
 
 @app.route('/', methods=['GET'])
 def health():
-    tess_path = pytesseract.pytesseract.tesseract_cmd
-    tess_exists = os.path.exists(tess_path)
+    # Test if tesseract actually runs
+    try:
+        result = subprocess.run(
+            [APPIMAGE, '--version'],
+            capture_output=True, text=True,
+            env={**os.environ, 'APPIMAGE_EXTRACT_AND_RUN': '1'},
+            timeout=10
+        )
+        tess_version = result.stdout.strip() or result.stderr.strip()
+        tess_ok = result.returncode == 0
+    except Exception as e:
+        tess_version = str(e)
+        tess_ok = False
+
     return jsonify({
         "status":      "ok",
         "service":     "Aadhaar OCR — Tesseract",
-        "tess_path":   tess_path,
-        "tess_exists": tess_exists
+        "tess_ok":     tess_ok,
+        "tess_version": tess_version
     })
 
 
